@@ -21,7 +21,7 @@ users_count = Gauge("users_count", "Number of users")
 ping = Gauge("ping", "Ping to discord")
 cpu_usage = Gauge("cpu_usage", "CPU usage")
 ram_usage = Gauge("ram_usage", "RAM usage")
-command_count = Counter("command_count", "Number of commands")
+command_count = Counter("command_count", "Number of commands",["command"])
 interaction_count = Counter(
     "interaction_count", "Number of interactions", ["type", "command"]
 )
@@ -54,12 +54,17 @@ class logcog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command(self, ctx):
-        command_count.inc(ctx.command.name)
+        command_count.labels(ctx.command.name).inc()
         all_commands_count.inc()
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: Interaction):
-        interaction_count.inc(interaction.type.name)
+        cmdname = None
+        if interaction.type == InteractionType.application_command:
+            cmdname = interaction.command.name
+        interaction_count.labels(
+            interaction.type.name, cmdname
+        ).inc()
         all_commands_count.inc()
 
     @commands.Cog.listener()

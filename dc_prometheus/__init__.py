@@ -1,0 +1,1 @@
+from dc_prometheus.logcog import logcog
