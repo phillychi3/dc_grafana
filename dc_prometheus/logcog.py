@@ -3,6 +3,8 @@ from discord.ext import commands, tasks
 from discord import Interaction, InteractionType, AutoShardedClient
 import psutil
 import os
+import logging
+log = logging.getLogger("prometheus")
 
 """
 需要紀錄的東西:
@@ -29,11 +31,20 @@ all_commands_count = Counter("all_commands_count", "Number of all commands")
 
 
 class logcog(commands.Cog):
-    def __init__(self, bot) -> None:
+    def __init__(self, bot:commands.Bot,port:int=8000) -> None:
         self.bot = bot
+        self.running = False
+        self.port = port
 
     def run_prometheus(self):
-        start_http_server(8000)
+        try:
+            start_http_server(self.port)
+        except OSError:
+            log.warning(f"Port {self.port-1} is already in use, try {self.port} instead")
+            self.port += 1
+            self.run_prometheus()
+        log.info(f"Prometheus server started on port {self.port}")
+        self.running = True
 
     def sync_all_status(self):
         guild_count.set(len(self.bot.guilds))
@@ -50,7 +61,8 @@ class logcog(commands.Cog):
     async def on_ready(self):
         self.sync_all_status()
         self.sync_sys_status.start()
-        self.run_prometheus()
+        if not self.running:
+            self.run_prometheus()
 
     @commands.Cog.listener()
     async def on_command(self, ctx):
