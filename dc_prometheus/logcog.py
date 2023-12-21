@@ -1,6 +1,6 @@
 from prometheus_client import start_http_server, Counter, Gauge
 from discord.ext import commands, tasks
-from discord import Interaction, InteractionType, AutoShardedClient
+from discord import Interaction, InteractionType, AutoShardedClient , Status
 import psutil
 import os
 import logging
@@ -20,6 +20,7 @@ log = logging.getLogger("prometheus")
 guild_count = Gauge("guild_count", "Number of guilds")
 channel_count = Gauge("channel_count", "Number of channels")
 users_count = Gauge("users_count", "Number of users")
+users_online = Gauge("users_online", "Number of users online")
 ping = Gauge("ping", "Ping to discord")
 cpu_usage = Gauge("cpu_usage", "CPU usage")
 ram_usage = Gauge("ram_usage", "RAM usage")
@@ -28,6 +29,8 @@ interaction_count = Counter(
     "interaction_count", "Number of interactions", ["type", "command"]
 )
 all_commands_count = Counter("all_commands_count", "Number of all commands")
+message_count = Counter("message_count", "Number of messages",["guild","user"])
+
 
 
 class logcog(commands.Cog):
@@ -50,6 +53,7 @@ class logcog(commands.Cog):
         guild_count.set(len(self.bot.guilds))
         channel_count.set(len(list(self.bot.get_all_channels())))
         users_count.set(len(list(self.bot.get_all_members())))
+        users_online.set(len(list(filter(lambda m: m.status != Status.offline, self.bot.get_all_members()))))
 
     @tasks.loop(seconds=20)
     async def sync_sys_status(self):
@@ -80,12 +84,16 @@ class logcog(commands.Cog):
         all_commands_count.inc()
 
     @commands.Cog.listener()
+    async def on_message(self, message):
+        message_count.labels(message.guild.id,message.author.id).inc()
+
+    @commands.Cog.listener()
     async def on_guide_join(self, guild):
-        self.sync_guild_status()
+        self.sync_all_status()
 
     @commands.Cog.listener()
     async def on_guide_remove(self, guild):
-        self.sync_guild_status()
+        self.sync_all_status()
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
