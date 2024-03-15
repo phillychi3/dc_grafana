@@ -43,7 +43,7 @@ class logcog(commands.Cog):
         try:
             start_http_server(self.port)
         except OSError:
-            log.warning(f"Port {self.port-1} is already in use, try {self.port} instead")
+            log.warning(f"Port {self.port} is already in use, try {self.port+1} instead")
             self.port += 1
             self.run_prometheus()
         log.info(f"Prometheus server started on port {self.port}")
@@ -85,7 +85,10 @@ class logcog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        message_count.labels(message.guild.id,message.author.id).inc()
+        if message.guild:
+            message_count.labels(message.guild.id,message.author.id).inc()
+        else:
+            message_count.labels(0,message.author.id).inc()
 
     @commands.Cog.listener()
     async def on_guide_join(self, guild):
