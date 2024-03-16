@@ -1,2 +1,2 @@
 prometheus_client
-discord
+discord>=2.0.0
