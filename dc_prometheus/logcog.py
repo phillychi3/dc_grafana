@@ -35,46 +35,52 @@ message_count = Counter("message_count", "Number of messages",["guild","user"])
 
 class logcog(commands.Cog):
     def __init__(self, bot:commands.Bot,port:int=8000) -> None:
+        """
+        Args:
+            bot: discord bot
+            port (int, optional): prometheus server port. Defaults is 8000
+        """
         self.bot = bot
         self.running = False
         self.port = port
 
-    def run_prometheus(self):
+    def run_prometheus(self) -> None:
         try:
             start_http_server(self.port)
         except OSError:
             log.warning(f"Port {self.port} is already in use, try {self.port+1} instead")
             self.port += 1
             self.run_prometheus()
+            return
         log.info(f"Prometheus server started on port {self.port}")
         self.running = True
 
-    def sync_all_status(self):
+    def sync_all_status(self) -> None:
         guild_count.set(len(self.bot.guilds))
         channel_count.set(len(list(self.bot.get_all_channels())))
         users_count.set(len(list(self.bot.get_all_members())))
         users_online.set(len(list(filter(lambda m: m.status != Status.offline, self.bot.get_all_members()))))
 
     @tasks.loop(seconds=20)
-    async def sync_sys_status(self):
+    async def sync_sys_status(self) -> None:
         ping.set(round(self.bot.latency, 1))
         cpu_usage.set(psutil.cpu_percent(3))
         ram_usage.set(psutil.Process(os.getpid()).memory_percent())
 
     @commands.Cog.listener()
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         self.sync_all_status()
         self.sync_sys_status.start()
         if not self.running:
             self.run_prometheus()
 
     @commands.Cog.listener()
-    async def on_command(self, ctx):
+    async def on_command(self, ctx) -> None:
         command_count.labels(ctx.command.name).inc()
         all_commands_count.inc()
 
     @commands.Cog.listener()
-    async def on_interaction(self, interaction: Interaction):
+    async def on_interaction(self, interaction: Interaction) -> None:
         cmdname = None
         if interaction.type == InteractionType.application_command:
             cmdname = interaction.command.name
@@ -84,24 +90,24 @@ class logcog(commands.Cog):
         all_commands_count.inc()
 
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message) -> None:
         if message.guild:
             message_count.labels(message.guild.id,message.author.id).inc()
         else:
             message_count.labels(0,message.author.id).inc()
 
     @commands.Cog.listener()
-    async def on_guide_join(self, guild):
+    async def on_guild_join(self, guild) -> None:
         self.sync_all_status()
 
     @commands.Cog.listener()
-    async def on_guide_remove(self, guild):
+    async def on_guild_remove(self, guild) -> None:
         self.sync_all_status()
 
     @commands.Cog.listener()
-    async def on_member_join(self, member):
+    async def on_member_join(self, member) -> None:
         users_count.inc()
 
     @commands.Cog.listener()
-    async def on_member_remove(self, member):
+    async def on_member_remove(self, member) -> None:
         users_count.dec()
