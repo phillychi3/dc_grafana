@@ -4,6 +4,7 @@ from discord import Interaction, InteractionType, AutoShardedClient, Status
 import psutil
 import os
 import logging
+from enum import Enum
 
 log = logging.getLogger("prometheus")
 
@@ -32,6 +33,9 @@ interaction_count = Counter(
 all_commands_count = Counter("all_commands_count", "Number of all commands")
 message_count = Counter("message_count", "Number of messages", ["guild", "user"])
 
+class lib(Enum):
+    discordpy = "Discord.py"
+    pycord = "Pycord"
 
 class logcog(commands.Cog):
     def __init__(self, bot: commands.Bot, port: int = 8000) -> None:
@@ -41,8 +45,17 @@ class logcog(commands.Cog):
             port (int, optional): prometheus server port. Defaults is 8000
         """
         self.bot = bot
+        self.lib = self.check_library(bot)
         self.running = False
         self.port = port
+
+    def check_library(bot) -> lib:
+        if hasattr(bot, 'application_commands'):
+            return lib.pycord
+        elif hasattr(bot, 'tree'):
+            return lib.discordpy
+        else:
+            return lib.discordpy
 
     def run_prometheus(self) -> None:
         try:
@@ -92,8 +105,12 @@ class logcog(commands.Cog):
     @commands.Cog.listener()
     async def on_interaction(self, interaction: Interaction) -> None:
         cmdname = None
-        if interaction.type == InteractionType.application_command:
-            cmdname = interaction.command.name
+        if self.lib == lib.discordpy:
+            if interaction.type == InteractionType.application_command:
+                cmdname = interaction.command.name
+        else:
+            if interaction.type == InteractionType.application_command:
+                cmdname = interaction.data.name
         interaction_count.labels(interaction.type.name, cmdname).inc()
         all_commands_count.inc()
 
