@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="dc_prometheus",
-    version="1.2",
+    version="1.3",
     author='phillychi3',
     author_email='phillychi3@gmail.com',
     description='push discord bot data to prometheus',
