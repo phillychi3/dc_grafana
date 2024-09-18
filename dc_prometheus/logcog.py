@@ -49,6 +49,7 @@ class logcog(commands.Cog):
         self.running = False
         self.port = port
 
+    @staticmethod
     def check_library(bot) -> lib:
         if hasattr(bot, 'application_commands'):
             return lib.pycord
@@ -110,7 +111,7 @@ class logcog(commands.Cog):
                 cmdname = interaction.command.name
         else:
             if interaction.type == InteractionType.application_command:
-                cmdname = interaction.data.name
+                cmdname = interaction.data["name"]
         interaction_count.labels(interaction.type.name, cmdname).inc()
         all_commands_count.inc()
 
