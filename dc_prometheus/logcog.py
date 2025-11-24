@@ -5,6 +5,7 @@ import psutil
 import os
 import logging
 from enum import Enum
+import asyncio
 
 log = logging.getLogger("prometheus")
 
@@ -33,9 +34,25 @@ interaction_count = Counter(
 all_commands_count = Counter("all_commands_count", "Number of all commands")
 message_count = Counter("message_count", "Number of messages", ["guild", "user"])
 
+
+async def cpu_percent(interval=None, *args, **kwargs):
+    process = psutil.Process(os.getpid())
+    if interval is not None and interval > 0.0:
+        process.cpu_percent(*args, **kwargs)
+        await asyncio.sleep(interval)
+    return process.cpu_percent(*args, **kwargs)
+
+
+async def memory_percent():
+    process = psutil.Process(os.getpid())
+    await asyncio.sleep(0)
+    return process.memory_percent()
+
+
 class lib(Enum):
     discordpy = "Discord.py"
     pycord = "Pycord"
+
 
 class logcog(commands.Cog):
     def __init__(self, bot: commands.Bot, port: int = 8000) -> None:
@@ -51,52 +68,58 @@ class logcog(commands.Cog):
 
     @staticmethod
     def check_library(bot) -> lib:
-        if hasattr(bot, 'application_commands'):
+        if hasattr(bot, "application_commands"):
             return lib.pycord
-        elif hasattr(bot, 'tree'):
+        elif hasattr(bot, "tree"):
             return lib.discordpy
         else:
             return lib.discordpy
 
-    def run_prometheus(self) -> None:
+    async def run_prometheus(self) -> None:
         try:
-            start_http_server(self.port)
+            await asyncio.to_thread(start_http_server, self.port)
         except OSError:
             log.warning(
                 f"Port {self.port} is already in use, try {self.port+1} instead"
             )
             self.port += 1
-            self.run_prometheus()
+            await self.run_prometheus()
             return
         log.info(f"Prometheus server started on port {self.port}")
         self.running = True
 
-    def sync_all_status(self) -> None:
-        guild_count.set(len(self.bot.guilds))
-        channel_count.set(len(list(self.bot.get_all_channels())))
-        users_count.set(len(list(self.bot.get_all_members())))
-        users_online.set(
-            len(
-                list(
-                    filter(
-                        lambda m: m.status != Status.offline, self.bot.get_all_members()
+    async def sync_all_status(self) -> None:
+        def _sync():
+            guild_count.set(len(self.bot.guilds))
+            channel_count.set(len(list(self.bot.get_all_channels())))
+            users_count.set(len(list(self.bot.get_all_members())))
+            users_online.set(
+                len(
+                    list(
+                        filter(
+                            lambda m: m.status != Status.offline,
+                            self.bot.get_all_members(),
+                        )
                     )
                 )
             )
-        )
+
+        await asyncio.to_thread(_sync)
 
     @tasks.loop(seconds=20)
     async def sync_sys_status(self) -> None:
         ping.set(round(self.bot.latency, 1))
-        cpu_usage.set(psutil.cpu_percent(3))
-        ram_usage.set(psutil.Process(os.getpid()).memory_percent())
+        cpu_value = await cpu_percent(interval=3)
+        cpu_usage.set(cpu_value)
+        ram_value = await memory_percent()
+        ram_usage.set(ram_value)
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        self.sync_all_status()
+        await self.sync_all_status()
         self.sync_sys_status.start()
         if not self.running:
-            self.run_prometheus()
+            await self.run_prometheus()
 
     @commands.Cog.listener()
     async def on_command(self, ctx) -> None:
@@ -124,11 +147,11 @@ class logcog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild) -> None:
-        self.sync_all_status()
+        await self.sync_all_status()
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild) -> None:
-        self.sync_all_status()
+        await self.sync_all_status()
 
     @commands.Cog.listener()
     async def on_member_join(self, member) -> None:
